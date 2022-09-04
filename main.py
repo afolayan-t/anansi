@@ -10,8 +10,8 @@ def main():
     print("This is Tolu's web crawler; Anansi.")
     initial_link = "http://python.org"
 
-    spiderman = Crawler(name='spiderman', max_page_count=3)
-
+    spiderman = Crawler(name='Anansi', max_page_count=3)
+    print(f'Loading crawler: {spiderman.name}')
     assert type(initial_link) == str, 'The link most be a string'
     print(f'going to {initial_link} ....')
     spiderman.crawl(initial_link)

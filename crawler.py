@@ -4,7 +4,7 @@ from datetime import datetime
 from threading import Thread, Lock
 import config
 from collections import deque
-from crawler_functions import get_links, get_response, parse_page, save_page
+from crawler_functions import get_links, get_response, parse_page, save_page, parse_plain_text
 
 
 class Crawler:
@@ -17,28 +17,34 @@ class Crawler:
     # class variable
     num_crawlers = 0
 
-    def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, verbose:bool=False, number_of_threads=0):
+    #TODO: implement booleans for crawler options
+    #TODO: test page count crawl
+    #TODO: implement page depth algo
+
+    def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False,):
         """initialize url queue, visited url quueue, depth, etc"""
         self.name = name if name else f'crawler_{self.__class__.num_crawlers}'
         self.to_visit = deque()
         self.local_to_visit = deque()
         self.visited = set() # hash the link name if it is in the list, don't visit again.
-
         self.max_depth = max_page_count if type(max_page_count) == int else config.MAX_PAGE_COUNT
         self.file_path = file_path if type(file_path) == str else config.DATA_PATH
         self.verbose = verbose if type(verbose) == bool else False
         
+        if record_frequency: self.frequency_map = dict()
+
         # threading variables
         self.max_threads = number_of_threads
         self.active_threads = list()
         
+        # increment global crawler variable.
         self.__class__.num_crawlers+=1
 
 
     # TODO: threading: https://www.geeksforgeeks.org/with-statement-in-python/ https://realpython.com/intro-to-python-threading/
     def take_job(self, link:str, lock:Lock):
         """Takes next link from queue, and passit to thread up """
-        
+
         try:
             if len(self.active_threads) > self.max_threads: return
             if self.local_to_visit: next_link = self.local_to_visit.popleft()
@@ -49,9 +55,8 @@ class Crawler:
         except Exception as exc:
             print(exc, file=stderr)
         # thread.args = ()
-
-
         pass
+
 
     # TODO: implement this function
     def crawl(self, link:str)-> None: 
@@ -81,6 +86,7 @@ class Crawler:
         # once crawl end condition is reached, return and stop process.
         return
 
+
     def index(self, folder_name:str, link:str) -> bool:
         """grabs links and other info out of files and saves them, to specified file paths."""
         # index links to add to queue
@@ -90,7 +96,9 @@ class Crawler:
             mod_link = link.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
             local_links, foreign_links = get_links(resp, link)
             save_page(resp, foldername=folder_name, pagefilename=mod_link, content=config.CONTENT_TAGS)
-
+            if self.frequency_map:
+                plain_text = parse_plain_text(resp) # convert from response to plain text for html page.
+                self.index_frequency(plain_text) # add words from plain text into frequency_map.
             # indexing completed, finsih with this link 
             self.visited.add(link)
             self.to_visit.extend(foreign_links)
@@ -100,9 +108,25 @@ class Crawler:
             print(exc, file=stderr)
             return False
     
+
     def filter(self, link:str) -> bool:
         """Filtering out files that have been seen before, in this crawl"""
         if link in self.visited or link in config.BANNED_DOMAINS:
             return False
         return True
+
+    
+    def index_frequency(self, text:str) -> None: # O(# of words)
+        """"""
+        text_list = text.split(' ') # splitting text by spaces into a list of strings.
+        for word in text_list:
+            if word in self.frequency_map: self.frequency_map[word] += 1
+            else: self.frequency_map[word] = 1
+        return
+
+
+    def get_word_frequency(self) -> list(tuple):
+        """Returns list of all words in frequency, in descending order."""
+        freq_list = sorted(self.frequency_map.items(), key=lambda x:-1*x[1]) # ~O(nlogn)
+        return freq_list
         

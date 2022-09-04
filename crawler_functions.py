@@ -80,3 +80,11 @@ def save_page(resp, foldername:str="", pagefilename:str='page', content:List[tup
         file.write(soup.prettify())
     return
 
+
+def parse_plain_text(resp: Response)-> str:
+    soup = BeautifulSoup(resp.text, features='html.parser')
+    res = ""
+    for text in soup.find_all("p"):
+        res+=text.get_text()
+    return res
+
