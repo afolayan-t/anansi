@@ -61,12 +61,11 @@ def parse_page(soup:BeautifulSoup, url:str, pagefolder:str, tag: str, inner:str=
     return soup
 
 
-def save_page(resp, pagefilename:str='page', foldername:str="", content:List[tuple]=[]) -> None:
+def save_page(resp, foldername:str="", pagefilename:str='page', content:List[tuple]=[]) -> None:
     """Takes in a file and saves it to our data file; ~/misc/data"""
-    print('got to page save')
     url = resp.url
     soup = BeautifulSoup(resp.text, features='html.parser')
-    pagefolder = f'{config.DATA_PATH}{pagefilename}_files'
+    pagefolder = f'{foldername}/{pagefilename}_files'
     for con in content:
         tag, inner = con
         soup = parse_page(soup, url, pagefolder, tag, inner)

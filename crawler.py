@@ -1,3 +1,4 @@
+import os
 from sys import stderr
 from datetime import datetime
 from threading import Thread, Lock
@@ -68,7 +69,10 @@ class Crawler:
 
         folder_name = f"{self.name}_{date}"
         # TODO: add folder to crawler helper functions to save files in correct places.
-        
+        if not os.path.exist(config.DATA_PATH+f'/{folder_name}/'):
+            folder_name = config.DATA_PATH+f'/{folder_name}/'
+            os.mkdir(folder_name)
+
         while not self.to_visit.empty() or page_count < self.max_page_count:
             link = self.local_to_visit.popleft() if not self.local_to_visit.empty() else self.to_visit.popleft()
             self.index(link, folder_name)
@@ -83,11 +87,11 @@ class Crawler:
         try:
             assert self.filter(link), 'file was rejected from indexing'
             resp = get_response(link)
-            mod_link = link.replace('/', '').repelace(':', '').replace('https', '').replace('http', '')
+            mod_link = link.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
             local_links, foreign_links = get_links(resp, link)
-            save_page(resp, pagefilename=mod_link, content=config.CONTENT_TAGS)
+            save_page(resp, foldername=folder_name, pagefilename=mod_link, content=config.CONTENT_TAGS)
 
-            # indexing completed, adding links to queue
+            # indexing completed, finsih with this link 
             self.visited.add(link)
             self.to_visit.extend(foreign_links)
             self.local_to_visit.extend(local_links)
