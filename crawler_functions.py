@@ -1,4 +1,5 @@
 from dataclasses import replace
+from tkinter.tix import Tree
 from typing import List
 import config
 import os, sys
@@ -19,7 +20,7 @@ ed_dict = {
     "#colon#":":"
 }
 
-
+# not using these right now
 def encoder(link:str) -> str:
     """encode urls into a form for storing in the queue, to save useful characters such as slashes, http, and https"""
     encoded_link = link.replace("\\", ed_dict["\\"]).replace("/", ed_dict["/"]).replace(":", ed_dict[":"]).replace("https", ed_dict["https"]).replace("http",ed_dict["http"])
@@ -59,7 +60,7 @@ def get_links(resp, link: str) -> tuple:
 # TODO: add save logic here https://stackoverflow.com/questions/31205497/how-to-download-a-full-webpage-with-a-python-script
 # https://stackabuse.com/parsing-xml-with-beautifulsoup-in-python/
 
-def parse_page(soup:BeautifulSoup, url:str, pagefolder:str, tag: str, inner:str='src') -> BeautifulSoup:
+def parse_page(soup:BeautifulSoup, url:str, pagefolder:str, tag: str, inner:str='src', debug=True) -> BeautifulSoup:
     """Get specified info out of pages and saves."""
     pagefolder = pagefolder
     if not os.path.exists(pagefolder):
@@ -82,19 +83,20 @@ def parse_page(soup:BeautifulSoup, url:str, pagefolder:str, tag: str, inner:str=
                     filebin = config.session.get(fileurl)
                     file.write(filebin.content)
         except Exception as exc:
-            print('in parse page')
-            print(exc, file=sys.stderr)
+            if debug:
+                print('in parse page')
+                print(exc, file=sys.stderr)
     return soup
 
 
-def save_page(resp, foldername:str="", pagefilename:str='page', content:List[tuple]=[]) -> None:
+def save_page(resp, foldername:str="", pagefilename:str='page', content:List[tuple]=[], debug=True) -> None:
     """Takes in a file and saves it to our data file; ~/misc/data"""
     url = resp.url
     soup = BeautifulSoup(resp.text, features='html.parser')
     pagefolder = f'{foldername}/{pagefilename}_files'
     for con in content:
         tag, inner = con
-        soup = parse_page(soup, url, pagefolder, tag, inner)
+        soup = parse_page(soup, url, pagefolder, tag, inner, debug)
 
     url = url.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
     pagefolder = pagefolder + "/pages/"

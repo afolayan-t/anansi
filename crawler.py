@@ -17,7 +17,6 @@ class Crawler:
     num_crawlers = 0
 
     #TODO: implement booleans for crawler options
-    #TODO: test page count crawl
     #TODO: implement page depth algo
 
     def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
@@ -28,8 +27,11 @@ class Crawler:
         self.visited = set() # hash the link name if it is in the list, don't visit again.
         self.max_page_count = max_page_count if type(max_page_count) == int else config.MAX_PAGE_COUNT
         self.file_path = file_path if type(file_path) == str else config.DATA_PATH
-        self.verbose = verbose if type(verbose) == bool else False
 
+        # crawler options
+        self.debug = debug
+        self.verbose = verbose if type(verbose) == bool else False
+        self.save_files = save_files
         self.record_frequency = record_frequency
         if self.record_frequency: self.frequency_map = dict()
 
@@ -53,8 +55,9 @@ class Crawler:
             return
 
         except Exception as exc:
-            print('in take job')
-            print(exc, file=sys.stderr)
+            if self.debug:
+                print('in take job')
+                print(exc, file=sys.stderr)
         # thread.args = ()
         pass
 
@@ -80,8 +83,6 @@ class Crawler:
             os.mkdir(folder_name)
 
         while (len(self.to_visit) != 0 or len(self.local_to_visit) != 0) and page_count < self.max_page_count:
-            # print('local', len(self.local_to_visit))
-            # print('to_visit', len(self.to_visit))
             if len(self.local_to_visit) != 0: link = self.local_to_visit.popleft()
             else: self.to_visit.popleft()
             self.index(link, folder_name)
@@ -95,20 +96,12 @@ class Crawler:
     def index(self, link:str, folder_name:str) -> bool:
         """grabs links and other info out of files and saves them, to specified file paths."""
         # index links to add to queue
-        # print(link)
         try:
             assert self.filter(link), 'file was rejected from indexing'
-            # print('got passed assert')
             resp = get_response(link)
-            # print('received response')
             mod_link = link.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
-            # print('got too get links')
             local_links, foreign_links = get_links(resp, link)
-            # print(local_links)
-            # print(foreign_links)
-            # print('got to save page')
-            save_page(resp, foldername=folder_name, pagefilename=mod_link, content=config.CONTENT_TAGS)
-            # print('passed_save_page')
+            if self.save_files: save_page(resp, foldername=folder_name, pagefilename=mod_link, content=config.CONTENT_TAGS, debug=self.debug)
             if self.record_frequency:
                 plain_text = parse_plain_text(resp) # convert from response to plain text for html page.
                 self.index_frequency(plain_text) # add words from plain text into frequency_map.
@@ -116,18 +109,16 @@ class Crawler:
             self.visited.add(link)
             self.to_visit.extend(foreign_links)
             self.local_to_visit.extend(local_links)
-            # print('foreign q', self.to_visit)
-            # print('local q',self.local_to_visit)
             return True
         except Exception as exc:
-            print('in index')
-            print(exc, file=sys.stderr)
+            if self.debug:
+                print('in index')
+                print(exc, file=sys.stderr)
             return False
     
 
     def filter(self, link:str) -> bool:
         """Filtering out files that have been seen before, in this crawl"""
-        print('got to filter')
         if link in self.visited or link in config.BANNED_DOMAINS:
             return False
         return True
