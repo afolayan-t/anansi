@@ -1,7 +1,6 @@
-import os
-from sys import stderr
+import os, sys
 from datetime import datetime
-from threading import Thread, Lock
+from threading import Thread, Lock, local
 import config
 from collections import deque
 from crawler_functions import get_links, get_response, parse_page, save_page, parse_plain_text
@@ -21,17 +20,18 @@ class Crawler:
     #TODO: test page count crawl
     #TODO: implement page depth algo
 
-    def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False,):
+    def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
         """initialize url queue, visited url quueue, depth, etc"""
         self.name = name if name else f'crawler_{self.__class__.num_crawlers}'
         self.to_visit = deque()
         self.local_to_visit = deque()
         self.visited = set() # hash the link name if it is in the list, don't visit again.
-        self.max_depth = max_page_count if type(max_page_count) == int else config.MAX_PAGE_COUNT
+        self.max_page_count = max_page_count if type(max_page_count) == int else config.MAX_PAGE_COUNT
         self.file_path = file_path if type(file_path) == str else config.DATA_PATH
         self.verbose = verbose if type(verbose) == bool else False
-        
-        if record_frequency: self.frequency_map = dict()
+
+        self.record_frequency = record_frequency
+        if self.record_frequency: self.frequency_map = dict()
 
         # threading variables
         self.max_threads = number_of_threads
@@ -53,7 +53,8 @@ class Crawler:
             return
 
         except Exception as exc:
-            print(exc, file=stderr)
+            print('in take job')
+            print(exc, file=sys.stderr)
         # thread.args = ()
         pass
 
@@ -69,48 +70,64 @@ class Crawler:
         We will implement multithreading to speed up the process. 
         """
         self.to_visit.append(link)# add first link to q
-        page_count = 1
+        page_count = 0
         date = datetime.now().strftime("%Y_%m_%d-%I:%M:%S_%p")
 
         folder_name = f"{self.name}_{date}"
         # TODO: add folder to crawler helper functions to save files in correct places.
-        if not os.path.exist(config.DATA_PATH+f'/{folder_name}/'):
-            folder_name = config.DATA_PATH+f'/{folder_name}/'
+        if not os.path.exists(config.DATA_PATH+f'{folder_name}'):
+            folder_name = config.DATA_PATH+f'{folder_name}'
             os.mkdir(folder_name)
 
-        while not self.to_visit.empty() or page_count < self.max_page_count:
-            link = self.local_to_visit.popleft() if not self.local_to_visit.empty() else self.to_visit.popleft()
+        while (len(self.to_visit) != 0 or len(self.local_to_visit) != 0) and page_count < self.max_page_count:
+            # print('local', len(self.local_to_visit))
+            # print('to_visit', len(self.to_visit))
+            if len(self.local_to_visit) != 0: link = self.local_to_visit.popleft()
+            else: self.to_visit.popleft()
             self.index(link, folder_name)
             page_count += 1
+            print('link indexed', page_count, self.max_page_count)
         
         # once crawl end condition is reached, return and stop process.
         return
 
 
-    def index(self, folder_name:str, link:str) -> bool:
+    def index(self, link:str, folder_name:str) -> bool:
         """grabs links and other info out of files and saves them, to specified file paths."""
         # index links to add to queue
+        # print(link)
         try:
             assert self.filter(link), 'file was rejected from indexing'
+            # print('got passed assert')
             resp = get_response(link)
+            # print('received response')
             mod_link = link.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
+            # print('got too get links')
             local_links, foreign_links = get_links(resp, link)
+            # print(local_links)
+            # print(foreign_links)
+            # print('got to save page')
             save_page(resp, foldername=folder_name, pagefilename=mod_link, content=config.CONTENT_TAGS)
-            if self.frequency_map:
+            # print('passed_save_page')
+            if self.record_frequency:
                 plain_text = parse_plain_text(resp) # convert from response to plain text for html page.
                 self.index_frequency(plain_text) # add words from plain text into frequency_map.
             # indexing completed, finsih with this link 
             self.visited.add(link)
             self.to_visit.extend(foreign_links)
             self.local_to_visit.extend(local_links)
+            # print('foreign q', self.to_visit)
+            # print('local q',self.local_to_visit)
             return True
         except Exception as exc:
-            print(exc, file=stderr)
+            print('in index')
+            print(exc, file=sys.stderr)
             return False
     
 
     def filter(self, link:str) -> bool:
         """Filtering out files that have been seen before, in this crawl"""
+        print('got to filter')
         if link in self.visited or link in config.BANNED_DOMAINS:
             return False
         return True
@@ -125,7 +142,7 @@ class Crawler:
         return
 
 
-    def get_word_frequency(self) -> list(tuple):
+    def get_word_frequency(self) -> list:
         """Returns list of all words in frequency, in descending order."""
         freq_list = sorted(self.frequency_map.items(), key=lambda x:-1*x[1]) # ~O(nlogn)
         return freq_list

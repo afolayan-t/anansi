@@ -1,3 +1,4 @@
+from distutils.debug import DEBUG
 from requests import Session
 
 def init():
@@ -7,6 +8,10 @@ def init():
     global CONTENT_TAGS
     global BANNED_DOMAINS
     global MAX_PAGE_COUNT
+    global DEBUG
+
+
+    DEBUG = True
 
     session = Session()
     DATA_PATH = "/home/tafol20/misc/data/"

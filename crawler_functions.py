@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import List
 import config
 import os, sys
@@ -5,6 +6,28 @@ from urllib import parse
 from bs4 import BeautifulSoup
 from requests import Response
 
+ed_dict = {
+    "\\": "#backslash#",
+    "/":"#slash#",
+    "http": "#unsecure#",
+    "https": "#secure#",
+    ":":"#colon#",
+    "#backslash#":"\\" ,
+    "#slash#":"/",
+    "#unsecure#": "http",
+    "#secure#":"https",
+    "#colon#":":"
+}
+
+
+def encoder(link:str) -> str:
+    """encode urls into a form for storing in the queue, to save useful characters such as slashes, http, and https"""
+    encoded_link = link.replace("\\", ed_dict["\\"]).replace("/", ed_dict["/"]).replace(":", ed_dict[":"]).replace("https", ed_dict["https"]).replace("http",ed_dict["http"])
+    return encoded_link
+
+def decoder(encoded:str) -> str:
+    decoded_link = encoded.replace("#backslash#", ed_dict["#backslash#"]).replace("#slash#", ed_dict["#slash#"]).replace("#unsecure#", ed_dict["#unsecure#"]).replace("#secure#", ed_dict["#secure#"]).replace("#colon#", ed_dict["#colon#"])
+    return decoded_link
 
 def get_response(link: str) -> Response:
     "calls link and returns byte response."
@@ -16,7 +39,9 @@ def get_links(resp, link: str) -> tuple:
     """get out all links in response, both in website links and out of website links"""
     local_links = []
     links = []
+    print('got to soup')
     bs = BeautifulSoup(resp.text, 'html.parser') # parsing file for info
+    print('got passed soup')
     bs_a = bs.find_all('a')
     for a in bs_a: # iterating through <a> tags
         href = a['href']
@@ -57,6 +82,7 @@ def parse_page(soup:BeautifulSoup, url:str, pagefolder:str, tag: str, inner:str=
                     filebin = config.session.get(fileurl)
                     file.write(filebin.content)
         except Exception as exc:
+            print('in parse page')
             print(exc, file=sys.stderr)
     return soup
 
