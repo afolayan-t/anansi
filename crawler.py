@@ -16,8 +16,14 @@ class Crawler:
     # class variable
     num_crawlers = 0
 
-    #TODO: implement booleans for crawler options
     #TODO: implement page depth algo
+    """In order to implement depth, we need to be able to keep track of the depth of our function. 
+    I.e. how far we've gone down a path of links. meaning that we need to count how many links get 
+    added to our q. example: We have 5 links on a page, put this into a q, once we've counted these 
+    links passed, we know we have gone down in depth. If we want we can define a max number of pages
+    to be.
+    
+    """
 
     def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
         """initialize url queue, visited url quueue, depth, etc"""
@@ -28,6 +34,7 @@ class Crawler:
         self.max_page_count = max_page_count if type(max_page_count) == int else config.MAX_PAGE_COUNT
         self.file_path = file_path if type(file_path) == str else config.DATA_PATH
 
+        self.depth_counter = 0
         # crawler options
         self.debug = debug
         self.verbose = verbose if type(verbose) == bool else False
@@ -77,7 +84,6 @@ class Crawler:
         date = datetime.now().strftime("%Y_%m_%d-%I:%M:%S_%p")
 
         folder_name = f"{self.name}_{date}"
-        # TODO: add folder to crawler helper functions to save files in correct places.
         if not os.path.exists(config.DATA_PATH+f'{folder_name}'):
             folder_name = config.DATA_PATH+f'{folder_name}'
             os.mkdir(folder_name)
@@ -87,7 +93,6 @@ class Crawler:
             else: self.to_visit.popleft()
             self.index(link, folder_name)
             page_count += 1
-            print('link indexed', page_count, self.max_page_count)
         
         # once crawl end condition is reached, return and stop process.
         return
