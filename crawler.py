@@ -1,10 +1,13 @@
 import os, sys
+import logging
+import threading
+import re
+import json, csv
 from datetime import datetime
-from threading import Thread, Lock, local
 import config
 from collections import deque
-from crawler_functions import get_links, get_response, parse_page, save_page, parse_plain_text
 
+from crawler_functions import get_links, get_response, save_page, parse_plain_text
 
 class Crawler:
     """
@@ -16,25 +19,16 @@ class Crawler:
     # class variable
     num_crawlers = 0
 
-    #TODO: implement page depth algo
-    """In order to implement depth, we need to be able to keep track of the depth of our function. 
-    I.e. how far we've gone down a path of links. meaning that we need to count how many links get 
-    added to our q. example: We have 5 links on a page, put this into a q, once we've counted these 
-    links passed, we know we have gone down in depth. If we want we can define a max number of pages
-    to be.
-    
-    """
-
-    def __init__(self, name:str="", max_page_count:int=config.MAX_PAGE_COUNT, file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
-        """initialize url queue, visited url quueue, depth, etc"""
+    def __init__(self, name:str="", file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
+        """initialize url queue, visited url queue, depth, etc"""
         self.name = name if name else f'crawler_{self.__class__.num_crawlers}'
         self.to_visit = deque()
-        self.local_to_visit = deque()
         self.visited = set() # hash the link name if it is in the list, don't visit again.
-        self.max_page_count = max_page_count if type(max_page_count) == int else config.MAX_PAGE_COUNT
+        self.max_page_count = config.MAX_PAGE_COUNT
         self.file_path = file_path if type(file_path) == str else config.DATA_PATH
 
         self.depth_counter = 0
+
         # crawler options
         self.debug = debug
         self.verbose = verbose if type(verbose) == bool else False
@@ -44,33 +38,25 @@ class Crawler:
 
         # threading variables
         self.max_threads = number_of_threads
-        self.active_threads = list()
+        self.active_threads = 0
         
         # increment global crawler variable.
         self.__class__.num_crawlers+=1
 
-
-    # TODO: threading: https://www.geeksforgeeks.org/with-statement-in-python/ https://realpython.com/intro-to-python-threading/
-    def take_job(self, link:str, lock:Lock):
-        """Takes next link from queue, and passit to thread up """
-
-        try:
-            if len(self.active_threads) > self.max_threads: return
-            if self.local_to_visit: next_link = self.local_to_visit.popleft()
-            else: next_link = self.to_visit.popleft()
-            # thread acquired
-            return
-
-        except Exception as exc:
-            if self.debug:
-                print('in take job')
-                print(exc, file=sys.stderr)
-        # thread.args = ()
+    def progress(max_depth: int) -> None:
         pass
 
+    # TODO: threading: https://www.geeksforgeeks.org/with-statement-in-python/ https://realpython.com/intro-to-python-threading/
+    def take_job(self, link:str, folder_name):
+        if self.active_threads < self.max_threads:
+            thread = threading.Thread(target=self.index, args=(link, folder_name,))
+            self.active_threads += 1
+            thread.start()
+            self.active_threads -= 1
+        
 
-    # TODO: implement this function
-    def crawl(self, link:str)-> None: 
+
+    def crawl(self, link:str, max_page_count:int=config.MAX_PAGE_COUNT, max_depth_count:int=config.MAX_DEPTH_COUNT, link_sampler=None)-> None: 
         """
         This runs the web crawling, until stopping conditions are met. Crawls to a
         certain depth, i.e. saves and index 10 layers of pages. Our function will
@@ -79,24 +65,41 @@ class Crawler:
 
         We will implement multithreading to speed up the process. 
         """
-        self.to_visit.append(link)# add first link to q
-        page_count = 0
+        self.to_visit.append(link) # add first link to q
         date = datetime.now().strftime("%Y_%m_%d-%I:%M:%S_%p")
+
+        self.links_processed = 0
+
+        self.local_to_visit_current = deque()
+        self.local_to_visit_next  = deque()
+
+        self.page_count = max_page_count
+        self.depth_count = max_depth_count
 
         folder_name = f"{self.name}_{date}"
         if not os.path.exists(config.DATA_PATH+f'{folder_name}'):
             folder_name = config.DATA_PATH+f'{folder_name}'
             os.mkdir(folder_name)
 
-        while (len(self.to_visit) != 0 or len(self.local_to_visit) != 0) and page_count < self.max_page_count:
-            if len(self.local_to_visit) != 0: link = self.local_to_visit.popleft()
-            else: self.to_visit.popleft()
-            self.index(link, folder_name)
-            page_count += 1
+        count = 0
+        while self.depth_count >= 0:
+            page_count = max_page_count
+            
+            while page_count >= 0:
+                if len(self.local_to_visit_current) != 0: link = self.local_to_visit_current.popleft()
+                else: self.to_visit.popleft()
+                if self.num_of_threads > 0:
+                    self.take_job(link, folder_name)
+                self.index(link, folder_name)
+                page_count -= 1
+                count += 1
+            
+            self.local_to_visit_current = self.local_to_visit_next
+            self.local_to_visit_next = deque()
+            self.depth_count -= 1
         
         # once crawl end condition is reached, return and stop process.
         return
-
 
     def index(self, link:str, folder_name:str) -> bool:
         """grabs links and other info out of files and saves them, to specified file paths."""
@@ -110,10 +113,12 @@ class Crawler:
             if self.record_frequency:
                 plain_text = parse_plain_text(resp) # convert from response to plain text for html page.
                 self.index_frequency(plain_text) # add words from plain text into frequency_map.
-            # indexing completed, finsih with this link 
+            self.links_processed += 1
+
+            # indexing completed, finish with this link 
             self.visited.add(link)
             self.to_visit.extend(foreign_links)
-            self.local_to_visit.extend(local_links)
+            self.local_to_visit_next.extend(local_links)
             return True
         except Exception as exc:
             if self.debug:
@@ -127,14 +132,24 @@ class Crawler:
         if link in self.visited or link in config.BANNED_DOMAINS:
             return False
         return True
-
     
+
+    @staticmethod
+    def santize_word(word: str):
+        sanitized = re.sub('[^A-Za-z0-9]+', '', word)
+        return sanitized
+
+
+    # TODO: make a nlp to detect text language
+    # TODO: make a nlp to extract nouns?
     def index_frequency(self, text:str) -> None: # O(# of words)
         """"""
         text_list = text.split(' ') # splitting text by spaces into a list of strings.
         for word in text_list:
-            if word in self.frequency_map: self.frequency_map[word] += 1
-            else: self.frequency_map[word] = 1
+            sanitized_word = self.santize_word(word)
+            if sanitized_word == '': continue
+            if sanitized_word in self.frequency_map: self.frequency_map[sanitized_word] += 1
+            else: self.frequency_map[sanitized_word] = 1
         return
 
 
@@ -142,4 +157,28 @@ class Crawler:
         """Returns list of all words in frequency, in descending order."""
         freq_list = sorted(self.frequency_map.items(), key=lambda x:-1*x[1]) # ~O(nlogn)
         return freq_list
+
+
+    # TODO: test json and csv methods
+    def get_frequency_json(self):
+        return json.dumps(self.frequency_map)
+
+    def save_frequency_json(self, folder:str="json"):
+        try:
+            with open(folder+"", "w") as  f:
+                json.dumps(self.get_frequency_json(), f)
+        except IOError:
+            print("I/O error")
         
+
+    def save_frequency_csv(self, folder:str="csv"):
+        csv_columns = ['word', 'count']
+        try:
+            with open(folder+"", 'w') as f:
+                writer = csv.DictWriter(f, fieldnames=csv_columns)
+                writer.writeheader()
+                for data in self.frequency_map:
+                    writer.writerow(data)
+
+        except IOError:
+            print("I/O error")

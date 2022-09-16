@@ -1,5 +1,3 @@
-from dataclasses import replace
-from tkinter.tix import Tree
 from typing import List
 import config
 import os, sys
@@ -40,9 +38,7 @@ def get_links(resp, link: str) -> tuple:
     """get out all links in response, both in website links and out of website links"""
     local_links = []
     links = []
-    print('got to soup')
     bs = BeautifulSoup(resp.text, 'html.parser') # parsing file for info
-    print('got passed soup')
     bs_a = bs.find_all('a')
     for a in bs_a: # iterating through <a> tags
         href = a['href']

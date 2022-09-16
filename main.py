@@ -4,19 +4,19 @@ import config
 def main():
     config.init() # initializing Global Variables
 
-    from crawler_functions import get_response, get_links, save_page
     from crawler import Crawler
 
-    print("This is Tolu's web crawler; Anansi.")
+    print("This is Tolu's web crawler; Anansi, it crawls the web.")
     initial_link = "http://python.org"
 
     # crawler_name = input("Please enter the name of your crawler: ")
     # seed_link = input("Please enter the seed link for the crawler: ")
-    spiderman = Crawler(name='Anansi', max_page_count=3, debug=True, save_files=False)
+    spiderman = Crawler(name='Anansi', debug=True, save_files=False, record_frequency=True)
     print(f'Loading crawler: {spiderman.name}')
     assert type(initial_link) == str, 'The link most be a string'
     print(f'going to {initial_link} ....')
-    spiderman.crawl(initial_link)
+    spiderman.crawl(initial_link,  max_page_count=10, max_depth_count=5)
+    # print(spiderman.get_word_frequency())
 
 
 if __name__ == "__main__":
