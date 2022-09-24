@@ -1,12 +1,11 @@
-import os, sys
-import logging
-import threading
-import re
-import json, csv
+import os, sys, time, logging, re, json, csv
+from threading import Thread, Lock
 from datetime import datetime
-import config
 from collections import deque
+from queue import Queue
 
+# local
+import config
 from crawler_functions import get_links, get_response, save_page, parse_plain_text
 
 class Crawler:
@@ -19,7 +18,7 @@ class Crawler:
     # class variable
     num_crawlers = 0
 
-    def __init__(self, name:str="", file_path:str=config.DATA_PATH, number_of_threads=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
+    def __init__(self, name:str="", file_path:str=config.DATA_PATH,number_of_threads:int=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
         """initialize url queue, visited url queue, depth, etc"""
         self.name = name if name else f'crawler_{self.__class__.num_crawlers}'
         self.to_visit = deque()
@@ -39,6 +38,8 @@ class Crawler:
         # threading variables
         self.max_threads = number_of_threads
         self.active_threads = 0
+        if self.max_threads:
+            self.thread_queue = Queue(self.max_threads * 2)
         
         # increment global crawler variable.
         self.__class__.num_crawlers+=1
@@ -47,16 +48,23 @@ class Crawler:
         pass
 
     # TODO: threading: https://www.geeksforgeeks.org/with-statement-in-python/ https://realpython.com/intro-to-python-threading/
-    def take_job(self, link:str, folder_name):
-        if self.active_threads < self.max_threads:
-            thread = threading.Thread(target=self.index, args=(link, folder_name,))
+    def take_job(self, link:str, folder_name:str):
+        """This function takes in a link and a index destination, and indexes it by using a thread,
+        it only runs up to max number of threads before it waits to run the next link. Returns False if link wasn't processed"""
+        # keeps trying to run the thread, whilst thread_ran is false
+        if self.active_threads < self.max_threads: # checks if active threads are less than max_threads
+            print("thread ran")
+            thread = Thread(target=self.index, args=(link, folder_name))
             self.active_threads += 1
             thread.start()
             self.active_threads -= 1
+            return True
+        
+        return False
         
 
 
-    def crawl(self, link:str, max_page_count:int=config.MAX_PAGE_COUNT, max_depth_count:int=config.MAX_DEPTH_COUNT, link_sampler=None)-> None: 
+    def crawl(self, link:str, max_page_count:int=config.MAX_PAGE_COUNT, max_depth_count:int=config.MAX_DEPTH_COUNT, link_sampler=None) -> None: 
         """
         This runs the web crawling, until stopping conditions are met. Crawls to a
         certain depth, i.e. saves and index 10 layers of pages. Our function will
@@ -65,6 +73,7 @@ class Crawler:
 
         We will implement multithreading to speed up the process. 
         """
+        time_start = time.perf_counter()
         self.to_visit.append(link) # add first link to q
         date = datetime.now().strftime("%Y_%m_%d-%I:%M:%S_%p")
 
@@ -84,13 +93,15 @@ class Crawler:
         count = 0
         while self.depth_count >= 0:
             page_count = max_page_count
-            
+            print("processing page links")
             while page_count >= 0:
-                if len(self.local_to_visit_current) != 0: link = self.local_to_visit_current.popleft()
-                else: self.to_visit.popleft()
-                if self.num_of_threads > 0:
-                    self.take_job(link, folder_name)
-                self.index(link, folder_name)
+                # print("local q", self.local_to_visit_current)
+                # TODO: make threading happen in one go with a loop, rather than over and over update take_job accordingly. https://stackoverflow.com/questions/64123551/what-is-the-safest-way-to-queue-multiple-threads-originating-in-a-loop
+                if self.local_to_visit_current: link = self.local_to_visit_current.popleft()
+                elif self.to_visit: link = self.to_visit.popleft()
+                else: continue
+                if self.max_threads and self.active_threads < self.max_threads: self.take_job(link, folder_name)
+                elif not self.max_threads: self.index(link, folder_name)
                 page_count -= 1
                 count += 1
             
@@ -98,6 +109,8 @@ class Crawler:
             self.local_to_visit_next = deque()
             self.depth_count -= 1
         
+        time_end = time.perf_counter()
+        print(f"Crawled for {time_end - time_start:0.4f} seconds")
         # once crawl end condition is reached, return and stop process.
         return
 
@@ -105,7 +118,7 @@ class Crawler:
         """grabs links and other info out of files and saves them, to specified file paths."""
         # index links to add to queue
         try:
-            assert self.filter(link), 'file was rejected from indexing'
+            assert self.filter(link), f'link was rejected from indexing: {link}'
             resp = get_response(link)
             mod_link = link.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
             local_links, foreign_links = get_links(resp, link)
