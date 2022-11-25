@@ -84,7 +84,7 @@ def parse_page(soup:BeautifulSoup, url:str, pagefolder:str, tag: str, inner:str=
                 print(exc, file=sys.stderr)
     return soup
 
-
+# add .txt files to potential files to save.
 def save_page(resp, foldername:str="", pagefilename:str='page', content:List[tuple]=[], debug=True) -> None:
     """Takes in a file and saves it to our data file; ~/misc/data"""
     url = resp.url

@@ -1,8 +1,6 @@
-import os, sys, time, logging, re, json, csv
-from threading import Thread, Lock
+import os, sys, time, re, json, csv
 from datetime import datetime
 from collections import deque
-from queue import Queue
 
 # local
 import config
@@ -18,7 +16,7 @@ class Crawler:
     # class variable
     num_crawlers = 0
 
-    def __init__(self, name:str="", file_path:str=config.DATA_PATH,number_of_threads:int=0, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
+    def __init__(self, name:str="", file_path:str=config.DATA_PATH, save_files:bool=False, record_frequency:bool=False, verbose:bool=False, debug:bool=False):
         """initialize url queue, visited url queue, depth, etc"""
         self.name = name if name else f'crawler_{self.__class__.num_crawlers}'
         self.to_visit = deque()
@@ -34,35 +32,17 @@ class Crawler:
         self.save_files = save_files
         self.record_frequency = record_frequency
         if self.record_frequency: self.frequency_map = dict()
-
-        # threading variables
-        self.max_threads = number_of_threads
-        self.active_threads = 0
-        if self.max_threads:
-            self.thread_queue = Queue(self.max_threads * 2)
         
         # increment global crawler variable.
         self.__class__.num_crawlers+=1
 
+    def __repr__(self):
+        return self.name
+
+
     def progress(max_depth: int) -> None:
         pass
-
-    # TODO: threading: https://www.geeksforgeeks.org/with-statement-in-python/ https://realpython.com/intro-to-python-threading/
-    def take_job(self, link:str, folder_name:str):
-        """This function takes in a link and a index destination, and indexes it by using a thread,
-        it only runs up to max number of threads before it waits to run the next link. Returns False if link wasn't processed"""
-        # keeps trying to run the thread, whilst thread_ran is false
-        if self.active_threads < self.max_threads: # checks if active threads are less than max_threads
-            print("thread ran")
-            thread = Thread(target=self.index, args=(link, folder_name))
-            self.active_threads += 1
-            thread.start()
-            self.active_threads -= 1
-            return True
         
-        return False
-        
-
 
     def crawl(self, link:str, max_page_count:int=config.MAX_PAGE_COUNT, max_depth_count:int=config.MAX_DEPTH_COUNT, link_sampler=None) -> None: 
         """
@@ -95,13 +75,15 @@ class Crawler:
             page_count = max_page_count
             print("processing page links")
             while page_count >= 0:
-                # print("local q", self.local_to_visit_current)
-                # TODO: make threading happen in one go with a loop, rather than over and over update take_job accordingly. https://stackoverflow.com/questions/64123551/what-is-the-safest-way-to-queue-multiple-threads-originating-in-a-loop
-                if self.local_to_visit_current: link = self.local_to_visit_current.popleft()
-                elif self.to_visit: link = self.to_visit.popleft()
+                print(f'page {page_count}')
+                if self.local_to_visit_current: 
+                    link = self.local_to_visit_current.popleft()
+                elif self.to_visit: 
+                    link = self.to_visit.popleft()
                 else: continue
-                if self.max_threads and self.active_threads < self.max_threads: self.take_job(link, folder_name)
-                elif not self.max_threads: self.index(link, folder_name)
+                print(link)
+                
+                self.index(link, folder_name)
                 page_count -= 1
                 count += 1
             
@@ -110,9 +92,9 @@ class Crawler:
             self.depth_count -= 1
         
         time_end = time.perf_counter()
-        print(f"Crawled for {time_end - time_start:0.4f} seconds")
         # once crawl end condition is reached, return and stop process.
         return
+
 
     def index(self, link:str, folder_name:str) -> bool:
         """grabs links and other info out of files and saves them, to specified file paths."""
@@ -120,6 +102,7 @@ class Crawler:
         try:
             assert self.filter(link), f'link was rejected from indexing: {link}'
             resp = get_response(link)
+            print("got to resp", resp)
             mod_link = link.replace('/', '').replace(':', '').replace('https', '').replace('http', '')
             local_links, foreign_links = get_links(resp, link)
             if self.save_files: save_page(resp, foldername=folder_name, pagefilename=mod_link, content=config.CONTENT_TAGS, debug=self.debug)
@@ -148,7 +131,7 @@ class Crawler:
     
 
     @staticmethod
-    def santize_word(word: str):
+    def sanitize_word(word: str):
         sanitized = re.sub('[^A-Za-z0-9]+', '', word)
         return sanitized
 
@@ -159,7 +142,7 @@ class Crawler:
         """"""
         text_list = text.split(' ') # splitting text by spaces into a list of strings.
         for word in text_list:
-            sanitized_word = self.santize_word(word)
+            sanitized_word = self.sanitize_word(word)
             if sanitized_word == '': continue
             if sanitized_word in self.frequency_map: self.frequency_map[sanitized_word] += 1
             else: self.frequency_map[sanitized_word] = 1
