@@ -1,7 +1,7 @@
 import os
 import unittest
 import config
-
+import json
 
 # get_response
 # get_links
@@ -16,7 +16,7 @@ import config
     # index
     # filter
     # index frequency
-    # get_word_frequency
+    # get_word_frequency2
     # get_frequency_json
     # save_frequency_json
     # save_frequency_csv
@@ -47,11 +47,32 @@ class TestCrawlerFrequency(unittest.TestCase):
     def test_sanitized(self):
         crawler = Crawler()
         data = "he#$ll)(o"
+        data_2 = "fo0d1e"
         self.assertEqual(crawler.sanitize_word(data), 'hello')
+        self.assertNotEqual(crawler.sanitize_word(data_2), 'fode')
 
-    # TODO: test fequency json
+    def test_json(self):
+        crawler = Crawler(record_frequency=True)
+        data = "test test test test fun food food web web web web crawler"
+        json_data = json.dumps({'test': 4, 'fun': 1, 'food': 2, 'web': 4, 'crawler': 1})
+        crawler.index_frequency(data)
+        self.assertEqual(crawler.get_frequency_json(), json_data)
+
+
+class TestCrawl(unittest.TestCase):
+    def test_get_response(self):
+        pass
+
+    def test_parse_page(self):
+        pass
+
+    def test_parse_plain_text(self):
+        pass
+
+    def test_get_links(self):
+        pass
     # TODO: crawl unit tests/ integration tests
-        
+    
 
     
 
@@ -60,5 +81,6 @@ class TestCrawlerFrequency(unittest.TestCase):
 if __name__ == '__main__':
     config.init()
     from crawler import Crawler
+    from crawler_functions import get_response, parse_plain_text
 
     unittest.main()

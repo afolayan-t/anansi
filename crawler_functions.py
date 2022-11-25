@@ -29,10 +29,9 @@ def decoder(encoded:str) -> str:
     return decoded_link
 
 def get_response(link: str) -> Response:
-    "calls link and returns byte response."
+    "sends get request to link and returns byte response."
     resp = config.session.get(link)
     return resp
-
 
 def get_links(resp, link: str) -> tuple:
     """get out all links in response, both in website links and out of website links"""

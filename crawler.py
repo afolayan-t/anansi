@@ -53,7 +53,7 @@ class Crawler:
 
         We will implement multithreading to speed up the process. 
         """
-        time_start = time.perf_counter()
+
         self.to_visit.append(link) # add first link to q
         date = datetime.now().strftime("%Y_%m_%d-%I:%M:%S_%p")
 
@@ -91,7 +91,6 @@ class Crawler:
             self.local_to_visit_next = deque()
             self.depth_count -= 1
         
-        time_end = time.perf_counter()
         # once crawl end condition is reached, return and stop process.
         return
 
